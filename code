@@ -1,0 +1,232 @@
+import dash
+from dash import dcc, html, Input, Output
+import plotly.express as px
+import pandas as pd
+
+# Initialize Dash app
+app = dash.Dash(__name__)
+
+# Load data
+teachers_data = pd.read_csv('No.of Teachers.csv')
+students_data = pd.read_csv('student-enrollment.csv')
+water_data = pd.read_csv('drinking-water-availability.csv')
+toilet_data = pd.read_csv('toilet.csv')
+electricity_data = pd.read_csv('electricity.csv')
+schools_data = pd.read_csv('sub schools.csv')
+
+# Clean column names for toilet data
+toilet_data.rename(columns=lambda x: x.strip(), inplace=True)
+
+# Add a column to calculate the total number of schools
+schools_data['Total Schools'] = schools_data['Govt Schools'] + schools_data['Private Schools']
+
+# Create a function to update the charts based on filters
+def create_charts(state=None):
+    filtered_schools_data = schools_data[schools_data['State'] == state] if state else schools_data
+    filtered_teachers_data = teachers_data[teachers_data['State'] == state] if state else teachers_data
+    filtered_students_data = students_data[students_data['State'] == state] if state else students_data
+    filtered_water_data = water_data[water_data['State'] == state] if state else water_data
+    filtered_toilet_data = toilet_data[toilet_data['State'] == state] if state else toilet_data
+    filtered_electricity_data = electricity_data[electricity_data['state'] == state] if state else electricity_data
+
+    # Line Chart for schools
+    line_chart = px.line(
+        filtered_schools_data.melt(
+            id_vars=['State'],
+            value_vars=['Govt Schools', 'Private Schools', 'Total Schools'],
+            var_name='School Type',
+            value_name='Number of Schools'
+        ),
+        x='State',
+        y='Number of Schools',
+        color='School Type',
+        title='Government, Private, and Total Schools by State',
+        markers=True,
+        color_discrete_sequence=px.colors.qualitative.Set1
+    )
+
+    # Bar chart for teachers
+    teachers_chart = px.bar(
+        filtered_teachers_data,
+        x='State',
+        y='No.of Teachers ',
+        color='No.of Teachers ',
+        title='Number of Teachers by State',
+        color_continuous_scale=px.colors.sequential.Viridis
+    )
+
+    # Line chart for students
+    students_chart = px.line(
+        filtered_students_data,
+        x='State',
+        y='Enrolment ',
+        title='Enrollment Rates by State',
+        markers=True
+    )
+
+    # Pie charts for facilities
+    water_chart = px.pie(
+        filtered_water_data,
+        names='State',
+        title='No. of Schools having Drinking Water Facility within School Premises',
+        color_discrete_sequence=px.colors.qualitative.Set1,
+        hole=0.3,
+    )
+
+    toilet_chart = px.pie(
+        filtered_toilet_data,
+        names='State',
+        values='Toilet Facility',
+        title='Toilet Facility',
+        color_discrete_sequence=px.colors.qualitative.Set1,
+        hole=0.3,
+    )
+
+    # Pie chart for electricity facility (state names shown below pie chart when selected)
+    electricity_chart = px.pie(
+        filtered_electricity_data,
+        names='state',
+        values='Schools with Electricity Facility',
+        title='Schools with Electricity Facility',
+        color_discrete_sequence=px.colors.qualitative.Set1,
+        hole=0.3,
+    )
+
+    # Add state names below the pie chart slices when a state is selected
+    annotations = []
+    if state:
+        annotations = [dict(
+            x=0.5,
+            y=-0.2,
+            text='<br>'.join(filtered_electricity_data['state'].unique()),  # State names joined by a line break
+            showarrow=False,
+            font=dict(size=12, color="black"),
+            align='center'
+        )]
+    
+    electricity_chart.update_traces(textinfo='none', hoverinfo='label+value')
+    electricity_chart.update_layout(annotations=annotations)
+
+    # Calculate total counts
+    total_count = filtered_schools_data['Total Schools'].sum()
+    govt_schools_count = filtered_schools_data['Govt Schools'].sum()
+    private_schools_count = filtered_schools_data['Private Schools'].sum()
+    total_students_enrolled = filtered_students_data['Enrolment '].sum()
+    total_teachers = filtered_teachers_data['No.of Teachers '].sum()
+    total_toilet_facility = filtered_toilet_data['Toilet Facility'].sum()
+    total_electricity_facility = filtered_electricity_data['Schools with Electricity Facility'].sum()
+
+    return line_chart, teachers_chart, students_chart, water_chart, toilet_chart, electricity_chart, total_count, govt_schools_count, private_schools_count, total_students_enrolled, total_teachers, total_toilet_facility, total_electricity_facility
+
+# Create Layout
+app.layout = html.Div(style={'fontFamily': 'Arial', 'backgroundColor': '#000000', 'color': '#FFFFFF'}, children=[
+    html.H1('Education Dashboard', style={'textAlign': 'center', 'color': '#cb4335', 'fontSize': 50}),
+    
+    # Dropdown to select state
+    html.Div([
+        html.Label('Select State:', style={'color': '#44fa05 '}),
+        dcc.Dropdown(
+            id='state-dropdown',
+            options=[{'label': state, 'value': state} for state in schools_data['State'].unique()],
+            placeholder='Select a state'
+        ),
+    ], style={'padding': '20px'}),
+    
+    dcc.Tabs([
+        dcc.Tab(label='Total Schools', style={'fontWeight': 'bold', 'backgroundColor': '#fa05d8 ', 'color': '#FFFFFF'}, children=[
+            html.Div(style={'padding': '20px'}, children=[
+                # Boxes to display total counts
+                html.Div(id='total-count-box', style={'padding': '10px', 'backgroundColor': '#000000', 'borderRadius': '10px', 'margin': '5px'}, children=[
+                    html.H2(id='total-count', style={'color': '#f50909 ', 'textAlign': 'edge'}),
+                    html.H2(id='govt-schools-count', style={'color': '#ddec1d ', 'textAlign': 'middle'}),
+                    html.H2(id='private-schools-count', style={'color': '#1fdaf8 ', 'textAlign': 'middle'}),
+                ]),
+                html.H3('Line Chart: Government, Private, and Total Schools', style={'color': '#03fdf5'}),
+                dcc.Graph(id='line-chart'),
+            ]),
+        ]),
+        dcc.Tab(label='No. of Students Enrolled', style={'fontWeight': 'bold', 'backgroundColor': '#fd0303', 'color': '#fbfcfc '}, children=[
+            html.Div(style={'padding': '20px'}, children=[
+                html.Div(id='students-count-box', style={'padding': '10px', 'backgroundColor': '#000000', 'borderRadius': '10px', 'margin': '5px'}, children=[
+                    html.H2(id='students-count', style={'color': '#fd0303 ', 'textAlign': 'center'}),
+                ]),
+                html.H3('Line Chart: Enrolled Students', style={'color': '#03fdf5'}),
+                dcc.Graph(id='students-chart'),
+            ]),
+        ]),
+        dcc.Tab(label='No. of Teachers', style={'fontWeight': 'bold', 'backgroundColor': '#FFD700', 'color': '#FFFFFF'}, children=[
+            html.Div(style={'padding': '20px'}, children=[
+                html.Div(id='teachers-count-box', style={'padding': '10px', 'backgroundColor': '#000000', 'borderRadius': '10px', 'margin': '5px'}, children=[
+                    html.H2(id='teachers-count', style={'color': '#fd0303', 'textAlign': 'center'}),
+                ]),
+                html.H3('Bar Chart: Number of Teachers', style={'color': '#03fdf5'}),
+                dcc.Graph(id='teachers-chart'),
+            ]),
+        ]),
+        dcc.Tab(label='Drinking Water Facility', style={'fontWeight': 'bold', 'backgroundColor': '#0000FF', 'color': '#FFFFFF'}, children=[
+            html.Div(style={'padding': '20px'}, children=[
+                html.Div(id='water-facility-box', style={'padding': '10px', 'backgroundColor': '#000000', 'borderRadius': '10px', 'margin': '5px'}, children=[
+                    html.H2(id='water-facility-count', style={'color': '#fd0303', 'textAlign': 'center'}),
+                ]),
+                html.H3('Pie Chart: Drinking Water Facility', style={'color': '#03fdf5'}),
+                dcc.Graph(id='water-chart'),
+            ]),
+        ]),
+        dcc.Tab(label='Toilet Facility', style={'fontWeight': 'bold', 'backgroundColor': '#008000', 'color': '#FFFFFF'}, children=[
+            html.Div(style={'padding': '20px'}, children=[
+                html.Div(id='toilet-facility-box', style={'padding': '5px', 'backgroundColor': '#000000', 'borderRadius': '10px', 'margin': '5px'}, children=[
+                    html.H2(id='toilet-facility-count', style={'color': '#fd0303', 'textAlign': 'center'}),
+                ]),
+                html.H3('Pie Chart: Toilet Facility', style={'color': '#03fdf5'}),
+                dcc.Graph(id='toilet-chart'),
+            ]),
+        ]),
+        dcc.Tab(label='Electricity Facility', style={'fontWeight': 'bold', 'backgroundColor': '#4B0082', 'color': '#FFFFFF'}, children=[
+            html.Div(style={'padding': '20px'}, children=[
+                html.Div(id='electricity-facility-box', style={'padding': '10px', 'backgroundColor': '#000000', 'borderRadius': '10px', 'margin': '5px'}, children=[
+                    html.H2(id='electricity-facility-count', style={'color': '#fd0303', 'textAlign': 'center'}),
+                ]),
+                html.H3('Pie Chart: Electricity Facility', style={'color': '#03fdf5'}),
+                dcc.Graph(id='electricity-chart'),
+            ]),
+        ]),
+    ]),
+
+])
+
+# Update charts based on state selection
+@app.callback(
+    [Output('line-chart', 'figure'),
+     Output('students-chart', 'figure'),
+     Output('teachers-chart', 'figure'),
+     Output('water-chart', 'figure'),
+     Output('toilet-chart', 'figure'),
+     Output('electricity-chart', 'figure'),
+     Output('total-count', 'children'),
+     Output('govt-schools-count', 'children'),
+     Output('private-schools-count', 'children'),
+     Output('students-count', 'children'),
+     Output('teachers-count', 'children'),
+     Output('water-facility-count', 'children'),
+     Output('toilet-facility-count', 'children'),
+     Output('electricity-facility-count', 'children')],
+    [Input('state-dropdown', 'value')]
+)
+def update_charts(state):
+    line_chart, teachers_chart, students_chart, water_chart, toilet_chart, electricity_chart, total_count, govt_schools_count, private_schools_count, total_students_enrolled, total_teachers, total_toilet_facility, total_electricity_facility = create_charts(state)
+    
+    total_count_text = f"Total Schools: {total_count}"
+    govt_schools_count_text = f"Govt Schools: {govt_schools_count}"
+    private_schools_count_text = f"Private Schools: {private_schools_count}"
+    students_count_text = f"No. of Students Enrolled: {total_students_enrolled}"
+    teachers_count_text = f"No. of Teachers: {total_teachers}"
+    water_facility_text = f"Schools with Drinking Water Facility: {total_count}"
+    toilet_facility_text = f"Schools with Toilet Facility: {total_toilet_facility}"
+    electricity_facility_text = f"Schools with Electricity Facility: {total_electricity_facility}"
+
+    return (line_chart, students_chart, teachers_chart, water_chart, toilet_chart, electricity_chart,
+            total_count_text, govt_schools_count_text, private_schools_count_text, students_count_text, teachers_count_text, water_facility_text, toilet_facility_text, electricity_facility_text)
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(port=8050, debug=True)
